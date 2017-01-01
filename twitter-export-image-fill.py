@@ -58,6 +58,24 @@ if args.EARLIER_ARCHIVE_PATH:
 
 image_count_global = 0
 
+# Function to download an avatar (from tweet or retweet)
+
+def download_avatar(user):
+  avatar_url = user['profile_image_url_https']
+  extension = os.path.splitext(avatar_url)[1]
+  screen_name = user['screen_name']
+  local_filename = "img/avatars/%s%s" % (screen_name, extension)
+  downloaded = 0
+  if not os.path.isfile(local_filename):
+    urllib.urlretrieve(avatar_url, local_filename)
+    downloaded = 1
+  user['profile_image_url_https_orig'] = avatar_url
+  user['profile_image_url_https'] = local_filename
+  return downloaded
+
+if not os.path.isdir("img/avatars"):
+  os.mkdir("img/avatars")
+
 # Process the index file to see what needs to be done
 
 index_filename = "data/js/tweet_index.js"
@@ -109,6 +127,7 @@ for date in index:
     tweet_length = len(data)
     image_count = 0
     tweet_count = 0
+    avatar_count = 0
     directory_name = 'data/js/tweets/%s_%s_media' % (year_str, month_str)
 
     print "%s/%s: %i tweets to process..." % (year_str, month_str, tweet_length)
@@ -121,6 +140,11 @@ for date in index:
       # Don't save images from retweets
       if (not args.include_retweets) and retweeted:
         continue
+
+      # Download avatar for tweet and retweet
+      avatar_count += download_avatar(tweet['user'])
+      if retweeted:
+        avatar_count += download_avatar(tweet['retweeted_status']['user'])
 
       if tweet['entities']['media']:
         tweet_image_count = 1
@@ -215,7 +239,7 @@ for date in index:
         # End loop 3 (images in a tweet)
 
     # End loop 2 (tweets in a month)
-    sys.stdout.write("\r%s/%s: %i tweets processed; %i images downloaded." % (year_str, month_str, tweet_length, image_count))
+    sys.stdout.write("\r%s/%s: %i tweets processed; %i images downloaded ; %i avatars downloaded." % (year_str, month_str, tweet_length, image_count, avatar_count))
     sys.stdout.write("\033[K") # Clear the end of the line
     sys.stdout.flush()
     print
