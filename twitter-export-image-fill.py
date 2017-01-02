@@ -26,10 +26,9 @@ import urllib
 from shutil import copyfile
 
 # download_avatar downloads an avatar (for a tweet or retweet). You must
-# pass in a dictionary that corresponds to the user stanza of a 
-# tweet or retweet. True or False will be returned depending on 
-# whether or not the user stanza was updated with the local 
-# avatar image.
+# pass in a dictionary that corresponds to the user stanza of a tweet or 
+# retweet. True or False will be returned depending on whether or not the
+# user object was updated with the local avatar image.
 
 def download_avatar(user):
   if 'profile_image_url_https_orig' in user:
