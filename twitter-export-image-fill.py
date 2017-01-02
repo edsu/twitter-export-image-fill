@@ -25,6 +25,26 @@ import time
 import urllib
 from shutil import copyfile
 
+# download_avatar downloads an avatar (for a tweet or retweet). You must
+# pass in a dictionary that corresponds to the user stanza of a 
+# tweet or retweet. True or False will be returned depending on 
+# whether or not the user stanza was updated with the local 
+# avatar image.
+
+def download_avatar(user):
+  if 'profile_image_url_https_orig' in user:
+    return False
+  avatar_url = user['profile_image_url_https']
+  extension = os.path.splitext(avatar_url)[1]
+  screen_name = user['screen_name']
+  local_filename = "img/avatars/%s%s" % (screen_name, extension)
+  if not os.path.isfile(local_filename):
+    urllib.urlretrieve(avatar_url, local_filename)
+  user['profile_image_url_https_orig'] = avatar_url
+  user['profile_image_url_https'] = local_filename
+  return True
+
+
 # Introduce yourself
 
 print "Twitter export image fill 1.02"
@@ -47,9 +67,7 @@ args = parser.parse_args()
 if args.EARLIER_ARCHIVE_PATH:
   earlier_archive_path = args.EARLIER_ARCHIVE_PATH
   earlier_archive_path = earlier_archive_path.rstrip('/') + '/'
-  try:
-    os.stat(earlier_archive_path + '/data/js/tweet_index.js')
-  except:
+  if not os.path.isfile(earlier_archive_path + '/data/js/tweet_index.js'):
     print "Could not find the earlier archive!"
     print "Make sure you're pointing at the directory that contains the index.html file."
     sys.exit()
@@ -58,20 +76,7 @@ if args.EARLIER_ARCHIVE_PATH:
 
 image_count_global = 0
 
-# Function to download an avatar (from tweet or retweet)
-
-def download_avatar(user):
-  avatar_url = user['profile_image_url_https']
-  extension = os.path.splitext(avatar_url)[1]
-  screen_name = user['screen_name']
-  local_filename = "img/avatars/%s%s" % (screen_name, extension)
-  downloaded = 0
-  if not os.path.isfile(local_filename):
-    urllib.urlretrieve(avatar_url, local_filename)
-    downloaded = 1
-  user['profile_image_url_https_orig'] = avatar_url
-  user['profile_image_url_https'] = local_filename
-  return downloaded
+# Make sure we have a directory for avatar images
 
 if not os.path.isdir("img/avatars"):
   os.mkdir("img/avatars")
@@ -107,9 +112,7 @@ for date in index:
 
     # Make a copy of the original JS file, just in case (only if it doesn't exist before)
     backup_filename = 'data/js/tweets/%s_%s_original.js' % (year_str, month_str)
-    try:
-      os.stat(backup_filename)
-    except:
+    if not os.path.isfile(backup_filename):
       copyfile(data_filename, backup_filename)
 
 
@@ -127,7 +130,6 @@ for date in index:
     tweet_length = len(data)
     image_count = 0
     tweet_count = 0
-    avatar_count = 0
     directory_name = 'data/js/tweets/%s_%s_media' % (year_str, month_str)
 
     print "%s/%s: %i tweets to process..." % (year_str, month_str, tweet_length)
@@ -137,14 +139,14 @@ for date in index:
 
       retweeted = 'retweeted_status' in tweet.keys()
 
+      # Download avatar for tweet and retweet
+      download_avatar(tweet['user'])
+      if retweeted:
+        download_avatar(tweet['retweeted_status']['user'])
+
       # Don't save images from retweets
       if (not args.include_retweets) and retweeted:
         continue
-
-      # Download avatar for tweet and retweet
-      avatar_count += download_avatar(tweet['user'])
-      if retweeted:
-        avatar_count += download_avatar(tweet['retweeted_status']['user'])
 
       if tweet['entities']['media']:
         tweet_image_count = 1
@@ -164,19 +166,17 @@ for date in index:
             continue
 
           url = media['media_url_https']
-          extension = re.match(r'(.*)\.([^.]*)$', url).group(2)
+          extension = os.path.splitext(url)[1]
 
           # Only make the directory when we're ready to write the first file;
           # this will avoid empty directories
-          try:
-            os.stat(directory_name)
-          except:
+          if not os.path.isdir(directory_name):
             os.mkdir(directory_name)
 
           # Download the original/best image size, rather than the default one
           better_url = url + ':orig'
 
-          local_filename = 'data/js/tweets/%s_%s_media/%s-%s-%s%s.%s' %\
+          local_filename = 'data/js/tweets/%s_%s_media/%s-%s-%s%s%s' %\
               (year_str, month_str, date, tweet['id'], 'rt-' if retweeted else '',
                tweet_image_count, extension)
 
@@ -187,11 +187,7 @@ for date in index:
           # If using an earlier archive as a starting point, try to find the desired
           # image file there first, and copy it if present
           if args.EARLIER_ARCHIVE_PATH:
-            try:
-              os.stat(earlier_archive_path + local_filename)
-            except:
-              pass
-            else:
+            if not os.path.isfile(earlier_archive_path + local_filename):
               can_be_copied = True
 
           sys.stdout.write("\r  [%i/%i] %s %s..." %
@@ -239,7 +235,7 @@ for date in index:
         # End loop 3 (images in a tweet)
 
     # End loop 2 (tweets in a month)
-    sys.stdout.write("\r%s/%s: %i tweets processed; %i images downloaded ; %i avatars downloaded." % (year_str, month_str, tweet_length, image_count, avatar_count))
+    sys.stdout.write("\r%s/%s: %i tweets processed; %i images downloaded." % (year_str, month_str, tweet_length, image_count))
     sys.stdout.write("\033[K") # Clear the end of the line
     sys.stdout.flush()
     print
